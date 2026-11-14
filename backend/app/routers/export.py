@@ -1,4 +1,4 @@
-"""分析导出中心接口：维护导出任务，覆盖开始导出、标记完成、清理文件等动作。"""
+"""分析导出中心接口：维护导出任务，覆盖开始导出、标记完成、清理文件与可视化发布结果同步。"""
 from __future__ import annotations
 
 from typing import Any
@@ -30,6 +30,24 @@ def list_entries(
     return PageResult(items=items, total=total, page=page, size=size)
 
 
+@router.post("/sync-vizdrag", response_model=ActionResult)
+def sync_vizdrag() -> ActionResult:
+    """补偿同步：把拖拽可视化已发布方案重新同步到导出中心，同一方案编号仍只保留一份任务。"""
+    tasks = service.sync_published_schemes()
+    return ActionResult(
+        ok=True,
+        message=f"已同步 {len(tasks)} 条已发布可视化方案，重复方案编号按幂等规则覆盖更新",
+        entry={"synced": tasks},
+    )
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出分析导出中心清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "export", "total": total, "items": items}
+
+
 @router.get("/{entry_id}", response_model=dict)
 def get_entry(entry_id: int) -> dict:
     """读取单条导出任务明细；不存在时给出可读的错误说明。"""
@@ -56,10 +74,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出分析导出中心清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "export", "total": total, "items": items}
